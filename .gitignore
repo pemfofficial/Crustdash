@@ -1,0 +1,19 @@
+# Dependencies and builds
+node_modules/
+.next/
+out/
+dist/
+release/
+
+# Local data: live session logs, your task list, and text extracted from your copy of the game
+data/live/
+data/logs/
+data/tasks.json
+data/game-text/
+data/wiki-cache/
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
+.env*
