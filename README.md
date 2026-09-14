@@ -13,7 +13,7 @@ Nothing leaves your PC: the dashboard is served at `http://127.0.0.1:3000` and r
 
 ## Install (players)
 
-Download the latest `CrustDash-<version>-steam.zip` from Releases, extract it, and double-click **Install CrustDash.cmd**. Then start The Crust from Steam; the dashboard opens with it. The zip's `README.txt` covers troubleshooting and uninstalling.
+**[Download the latest release](https://github.com/pemfofficial/Crustdash/releases/latest)**: get `CrustDash-<version>-steam.zip`, extract it, and double-click **Install CrustDash.cmd**. Then start The Crust from Steam; the dashboard opens with it and a moon icon appears in the system tray (right-click it for status, Restart and Quit). The zip's `README.txt` covers troubleshooting and uninstalling.
 
 The installer:
 
