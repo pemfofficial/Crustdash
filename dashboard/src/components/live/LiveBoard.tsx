@@ -73,7 +73,8 @@ function CreditsWidget({ ctx, live }: WidgetProps) {
     return () => window.removeEventListener(FOCUS_RESOURCE_EVENT, onFocus);
   }, []);
   const credits = ctx.mismatch ? ctx.savedCredits : (live.credits ?? ctx.savedCredits);
-  const monthStart = ctx.mismatch ? null : (live.game?.CreditsAtMonthStart ?? null);
+  // The game reports 0 until its first month rollover; only a real starting balance gives a meaningful change
+  const monthStart = ctx.mismatch ? null : live.game?.CreditsAtMonthStart || null;
   const change = credits != null && monthStart != null ? credits - monthStart : null;
   return (
     <div id="live-credits" className={`w-flash${flash ? " flash" : ""}`}>
@@ -127,7 +128,9 @@ function DronesWidget({ live }: WidgetProps) {
   const total = glossaryValue(live, "G.Stats.DroneCount");
   const standard = glossaryValue(live, "G.Stats.DefaultRobotCount");
   const mining = glossaryValue(live, "G.Stats.MinerRobotCount");
-  return <Readout value={shown(total)} sub={standard == null ? DASH : `${integer(standard)} standard, ${integer(mining ?? 0)} mining`} />;
+  // The game's per-type counters don't always add up to its total; only show the split when they do
+  const split = total != null && standard != null && mining != null && standard + mining === total;
+  return <Readout value={shown(total)} sub={split ? `${integer(standard)} standard, ${integer(mining)} mining` : "Drones on the base"} />;
 }
 
 function ColonistsWidget({ live }: WidgetProps) {

@@ -3,8 +3,7 @@
 $SteamAppId = '1465470'
 $GameExe = 'TheCrust-Win64-Shipping.exe'
 $GameProcess = 'TheCrust-Win64-Shipping'
-# CRUSTDASH_PORT moves the dashboard off 3000 when another program needs that port
-$DashboardPort = if ($env:CRUSTDASH_PORT) { [int]$env:CRUSTDASH_PORT } else { 3000 }
+$DefaultPort = 3000
 
 # UE4SS v3.0.1-1133-gb4cefa18 (github.com/UE4SS-RE/RE-UE4SS, experimental-latest): the build CrustDash is tested with
 $Ue4ssHashes = @{
@@ -126,6 +125,30 @@ function New-Shortcut([string]$path, [string]$target, [string]$arguments, [strin
     $shortcut.Description = $description
     $shortcut.WindowStyle = $windowStyle
     $shortcut.Save()
+}
+
+# The port the dashboard uses: CRUSTDASH_PORT, else the one the launcher last picked (data\port.txt), else 3000
+function Get-DashboardPort([string]$installDir) {
+    if ($env:CRUSTDASH_PORT) { return [int]$env:CRUSTDASH_PORT }
+    $file = Join-Path $installDir 'data\port.txt'
+    if (Test-Path $file) { return [int](Get-Content $file -Raw).Trim() }
+    return $DefaultPort
+}
+
+# True only when this install's dashboard answers on the port (not some other program, not another copy)
+function Test-OurDashboard([int]$port, [string]$dataDir) {
+    try {
+        $health = Invoke-RestMethod "http://127.0.0.1:$port/api/health" -TimeoutSec 2
+        return $health.app -eq 'CrustDash' -and $health.dataDir -ieq $dataDir
+    } catch {
+        return $false
+    }
+}
+
+function Test-PortFree([int]$port) {
+    if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) { return $false }
+    $listener = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), $port
+    try { $listener.Start(); return $true } catch { return $false } finally { $listener.Stop() }
 }
 
 function Get-DashboardProcess([string]$installDir) {

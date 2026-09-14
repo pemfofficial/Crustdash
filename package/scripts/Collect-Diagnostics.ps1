@@ -23,7 +23,9 @@ if (Test-Path (Join-Path $InstallDir 'install.json')) {
     Add-Copy (Join-Path $InstallDir 'install.json') 'install.json'
 }
 $dashboardUp = $false
-try { $dashboardUp = (Invoke-WebRequest "http://127.0.0.1:$DashboardPort/api/profiles" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200 } catch { }
+$port = Get-DashboardPort $InstallDir
+$dashboardUp = Test-OurDashboard $port (Join-Path $InstallDir 'data')
+$lines += "Dashboard port: $port"
 $lines += "Dashboard responding: $dashboardUp"
 $lines += "Game running: $([bool](Get-Process -Name $GameProcess -ErrorAction SilentlyContinue))"
 
@@ -41,6 +43,7 @@ if ($install -and $install.gameDir) {
 }
 
 Add-Copy (Join-Path $InstallDir 'data\logs') 'logs'
+Add-Copy (Join-Path $InstallDir 'data\port.txt') 'port.txt'
 $live = Join-Path $InstallDir 'data\live'
 if (Test-Path $live) {
     $sessions = Get-ChildItem $live -Filter 'session_*.ndjson' | Sort-Object LastWriteTime -Descending

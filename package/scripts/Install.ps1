@@ -153,7 +153,8 @@ if (-not $NoShortcuts) {
     New-Shortcut (Join-Path $menu 'Collect CrustDash diagnostics.lnk') $powershell "-NoProfile -ExecutionPolicy Bypass -File `"$scripts\Collect-Diagnostics.ps1`"" $InstallDir 'Zip logs for a bug report' 1
     New-Shortcut (Join-Path $menu 'Uninstall CrustDash.lnk') $powershell "-NoProfile -ExecutionPolicy Bypass -File `"$scripts\Uninstall.ps1`"" $InstallDir 'Remove CrustDash' 1
     New-Shortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'CrustDash.lnk') $launcher '' $InstallDir 'Open the CrustDash dashboard' 7
-    Write-Host 'Start menu: CrustDash, CrustDash (debug), Stop CrustDash, Collect CrustDash diagnostics, Uninstall CrustDash. Desktop: CrustDash.'
+    Write-Host 'Added a CrustDash icon to your desktop, and a CrustDash folder to the Windows Start menu with:'
+    Write-Host '  CrustDash, CrustDash (debug), Stop CrustDash, Collect CrustDash diagnostics, Uninstall CrustDash'
 }
 
 Write-Host ''
@@ -163,7 +164,8 @@ if ($NoStartWithGame) {
 } else {
     Write-Host 'Start The Crust from Steam as usual: the dashboard opens in your browser a few seconds later.'
 }
-Write-Host 'The dashboard runs only on this PC, at http://127.0.0.1:3000'
+Write-Host 'To open it any time: press the Windows key, type CrustDash and press Enter, or use the CrustDash icon on your desktop.'
+Write-Host 'It runs only on this PC; nothing is sent over the internet.'
 if (-not $Quiet) {
     $open = Read-Host 'Open the dashboard now? [Y/n]'
     if ($open -notmatch '^(n|no)$') { & (Join-Path $InstallDir 'CrustDash.cmd') }
