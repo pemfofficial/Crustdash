@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { requestOpenSection } from "@/components/ui/Section";
 import { useStoredState } from "@/lib/client/useStoredState";
-import type { AlertRule } from "@/lib/crust/alerts";
+import { normalizeRule, type AlertRule } from "@/lib/crust/alerts";
 
 export type SoundPrefs = { enabled: boolean; volume: number };
 
@@ -26,6 +26,7 @@ const PrefsContext = createContext<Prefs | null>(null);
 const NO_PINS: Record<string, string> = {};
 const NO_ALERTS: AlertRule[] = [];
 const DEFAULT_SOUND: SoundPrefs = { enabled: true, volume: 0.6 };
+const normalizeAll = (list: unknown[]) => list.map(normalizeRule).filter((r): r is AlertRule => r !== null);
 
 export function usePrefs(): Prefs {
   const v = useContext(PrefsContext);
@@ -36,7 +37,10 @@ export function usePrefs(): Prefs {
 /** Per-browser preferences (localStorage): pins, alert rules, and alert sound. */
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [pins, setPins] = useStoredState("crustdash:pins", NO_PINS);
-  const [alerts, setAlerts] = useStoredState("crustdash:alerts", NO_ALERTS);
+  const [storedAlerts, setStoredAlerts] = useStoredState("crustdash:alerts", NO_ALERTS);
+  // Alerts saved by older versions ({ kind, target }) are converted to the current rule shape on read and on the next save
+  const alerts = useMemo(() => normalizeAll(storedAlerts), [storedAlerts]);
+  const setAlerts = useCallback((update: (a: AlertRule[]) => AlertRule[]) => setStoredAlerts((a) => update(normalizeAll(a))), [setStoredAlerts]);
   const [sound, setSound] = useStoredState("crustdash:sound", DEFAULT_SOUND);
 
   const value = useMemo<Prefs>(

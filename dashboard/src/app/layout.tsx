@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Barlow_Semi_Condensed, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "./features.css";
+import "./alerts.css";
 import { themeBootScript } from "@/components/ui/ThemeToggle";
 
 // The Crust's own UI font is Bahnschrift (ships with Windows) and the terminal face is Cascadia Mono.

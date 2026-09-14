@@ -10,7 +10,6 @@ import { FOCUS_RESOURCE_EVENT, usePrefs } from "@/components/live/PrefsProvider"
 import { useMarketRows, useResourceLabel } from "@/components/live/useMarketRows";
 import { Fact } from "@/components/ui/Fact";
 import { InfoTip } from "@/components/ui/InfoTip";
-import type { AlertSubject } from "@/lib/crust/alerts";
 import type { ResourceRow } from "@/lib/crust/insights";
 import type { TopicId } from "@/lib/crust/topics";
 import { WikiFact } from "@/components/wiki/WikiFact";
@@ -187,18 +186,6 @@ export function ResourceTable({ saveRows, holdings, holdingsSource, rangeLabel, 
   const historyX = today != null ? Array.from({ length: historyLen }, (_, i) => today - (historyLen - 1 - i) * DAY) : [];
   const pad = (arr: number[]) => Array.from({ length: historyLen }, (_, i) => arr[i - (historyLen - arr.length)] ?? null);
 
-  const subjectOf = (r: Row): AlertSubject => ({
-    name: r.name,
-    label: r.label,
-    sell: r.sell,
-    buy: r.buy,
-    vsBase: r.vsBase,
-    sellRangePos: r.range,
-    volumeRatio: r.supply,
-    held: r.held,
-    heldValue: r.worth,
-    heldSource: holdingsSource,
-  });
   const pinningRow = rows.find((r) => r.name === pinning);
   const alertingRow = rows.find((r) => r.name === alerting);
 
@@ -249,7 +236,7 @@ export function ResourceTable({ saveRows, holdings, holdingsSource, rangeLabel, 
           <tbody>
             {visible.map((r) => {
               const pin = pins[r.name];
-              const alertCount = alerts.filter((a) => a.target === r.name && a.enabled).length;
+              const alertCount = alerts.filter((a) => a.enabled && a.source.type === "resource" && a.source.resource === r.name).length;
               const classes = [pin ? "pinned" : "", selectedRow?.name === r.name ? "row-selected" : "", flash === r.name ? "flash" : ""].filter(Boolean).join(" ");
               return (
                 <tr key={r.name} id={`res-${r.name}`} className={classes || undefined} style={pin ? ({ ["--pin" as string]: pin } as CSSProperties) : undefined}>
@@ -334,7 +321,7 @@ export function ResourceTable({ saveRows, holdings, holdingsSource, rangeLabel, 
 
       {pinningRow && <PinModal name={pinningRow.name} label={pinningRow.label} onClose={() => setPinning(null)} />}
       {alertingRow && (
-        <AlertEditor target={alertingRow.name} label={alertingRow.label} subject={subjectOf(alertingRow)} credits={live.credits} onClose={() => setAlerting(null)} />
+        <AlertEditor resource={alertingRow.name} onClose={() => setAlerting(null)} />
       )}
     </>
   );

@@ -1,39 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useLive, useLiveClock } from "@/components/live/LiveProvider";
-import { focusResource, showResource, usePrefs } from "@/components/live/PrefsProvider";
-import { useAlertSubjects, useMarketRows } from "@/components/live/useMarketRows";
-import { requestOpenSection } from "@/components/ui/Section";
-import { Modal } from "@/components/ui/Modal";
-import { RichText } from "@/components/ui/RichText";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkline } from "@/components/charts/Figures";
 import { compact, integer, signedPercent } from "@/components/charts/format";
+import { focusResource, showResource, usePrefs } from "@/components/live/PrefsProvider";
+import { useMarketRows } from "@/components/live/useMarketRows";
+import { openNotifications } from "@/components/notifications/Notifications";
+import { openTasks } from "@/components/tasks/TaskCenter";
+import { Modal } from "@/components/ui/Modal";
+import { RichText } from "@/components/ui/RichText";
+import { openModule } from "@/lib/client/moduleHash";
 import { playChime, unlockAudio } from "@/lib/client/sound";
-import { CREDITS_TARGET, KIND_DEFS, evaluateRule, formatThreshold, formatValue, type AlertRule, type AlertSubject } from "@/lib/crust/alerts";
+import { CREDITS_TARGET, METRICS, describeCondition, evaluateRule, formatAmount, sourceInfo, sourceLabel, usesBaseline, type AlertRule } from "@/lib/crust/alerts";
+import { useAlertContext } from "./AlertData";
 
-type Fired = {
-  key: string;
-  rule: AlertRule;
-  value: number | null;
-  subject: AlertSubject | null;
-  sellHistory: number[];
-  credits: number | null;
-  at: number;
-};
+type Fired = { key: string; rule: AlertRule; value: number | null; detail: string | null };
 
-/** Evaluates alert rules on every live snapshot, plays the chime, and shows the alert pop-up. */
-export function AlertEngine({ holdings, holdingsSource }: { holdings: Record<string, number>; holdingsSource: "live" | "save" }) {
-  const live = useLive();
-  const { status } = useLiveClock();
+/** Values are still arriving right after the page opens; hold off firing so loading doesn't look like changes. */
+const WARM_UP_MS = 20000;
+
+/** Where "Show me" goes for an alert. */
+function showAlert(rule: AlertRule) {
+  const source = rule.source;
+  if (source.type === "resource") return showResource(source.resource);
+  if (source.type === "metric") {
+    const group = METRICS[source.metric].group;
+    if (group === "Missions" || source.metric === "openTasks") return openTasks();
+    if (group === "Assistant") return openNotifications();
+    if (group === "Market") return openModule("findings/market");
+    if (source.metric === "credits") window.setTimeout(() => focusResource(CREDITS_TARGET), 60);
+  }
+  openModule("live");
+}
+
+/**
+ * Checks every alert once a second and shows the pop-up with a chime.
+ * - Level rules (reaches, drops to, is) fire when the condition becomes true, and re-arm once it clears.
+ * - Change rules (rises by, falls by, changes) compare with a starting value kept here, set when the rule is first
+ *   checked and reset after it fires.
+ * - Yes/no values (paused, connected) fire when they flip to the chosen state.
+ */
+export function AlertEngine() {
+  const ctx = useAlertContext();
   const { alerts, updateAlert, sound } = usePrefs();
-  const subjects = useAlertSubjects(holdings, holdingsSource);
-  const rows = useMarketRows(holdings);
+  const rows = useMarketRows();
+  const sellHistory = useMemo(() => new Map(rows.map((r) => [r.name, r.sellHistory])), [rows]);
   const [queue, setQueue] = useState<Fired[]>([]);
-  // The checker runs on a timer and reads the newest values from here (updated after every render)
-  const latest = useRef({ status, alerts, subjects, rows, credits: live.credits, sound, updateAlert });
+  const latest = useRef({ ctx, alerts, sound, updateAlert });
+  const baselines = useRef(new Map<string, number>());
+  const startedAt = useRef<number | null>(null);
   useEffect(() => {
-    latest.current = { status, alerts, subjects, rows, credits: live.credits, sound, updateAlert };
+    latest.current = { ctx, alerts, sound, updateAlert };
   });
 
   // Browsers only play audio after a user gesture; warm the audio context on the first click anywhere
@@ -43,33 +60,46 @@ export function AlertEngine({ holdings, holdingsSource }: { holdings: Record<str
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
 
-  // Check every rule once a second against the latest live data (live snapshots arrive about every 2 s)
   useEffect(() => {
     const check = () => {
-      const { status, alerts, subjects, rows, credits, sound, updateAlert } = latest.current;
-      if (status !== "live") return;
+      const { ctx, alerts, sound, updateAlert } = latest.current;
+      const now = Date.now();
+      startedAt.current ??= now;
+      const warmingUp = now - startedAt.current < WARM_UP_MS;
       const fired: Fired[] = [];
+      const fire = (rule: AlertRule, value: number | null, detail: string | null, patch: Partial<AlertRule>) => {
+        fired.push({ key: `${rule.id}-${now}`, rule, value, detail });
+        updateAlert(rule.id, { lastFiredAt: now, firedCount: rule.firedCount + 1, enabled: rule.repeat, ...patch });
+      };
+
       for (const rule of alerts) {
-        if (!rule.enabled) continue;
-        const subject = rule.target === CREDITS_TARGET ? null : subjects.get(rule.target) ?? null;
-        const ev = evaluateRule(rule, subject, credits);
-        if (ev.unavailable) continue;
-        if (ev.met && rule.armed) {
-          const now = Date.now();
-          fired.push({
-            key: `${rule.id}-${now}`,
-            rule,
-            value: ev.value,
-            subject,
-            sellHistory: rows.find((r) => r.name === rule.target)?.sellHistory ?? [],
-            credits,
-            at: now,
-          });
-          updateAlert(rule.id, { armed: false, lastFiredAt: now, firedCount: rule.firedCount + 1, enabled: rule.repeat });
-        } else if (!ev.met && !rule.armed && rule.repeat) {
-          updateAlert(rule.id, { armed: true });
+        if (!rule.enabled) {
+          baselines.current.delete(rule.id);
+          continue;
         }
+        const yesNo = sourceInfo(rule.source).unit === "flag";
+        const baseline = baselines.current.get(rule.id) ?? null;
+        const ev = evaluateRule(rule, ctx, baseline);
+        if (ev.value == null) continue;
+
+        if (!yesNo && !usesBaseline(rule)) {
+          if (ev.met && rule.armed && !warmingUp) fire(rule, ev.value, ev.detail, { armed: false });
+          else if (!ev.met && !rule.armed && rule.repeat) updateAlert(rule.id, { armed: true });
+          continue;
+        }
+
+        if (baseline == null || warmingUp) {
+          baselines.current.set(rule.id, ev.value);
+          continue;
+        }
+        const met = yesNo ? baseline !== rule.threshold && ev.value === rule.threshold : ev.met;
+        if (met) fire(rule, ev.value, ev.detail, {});
+        // Measure the next change from here: after firing, whenever a yes/no value is read, and when a rises/falls
+        // rule moves the other way (so "rises by 5" means 5 above the lowest point since)
+        const wrongWay = (rule.comparator === "risesBy" && ev.value < baseline) || (rule.comparator === "fallsBy" && ev.value > baseline);
+        if (met || yesNo || wrongWay) baselines.current.set(rule.id, ev.value);
       }
+
       if (fired.length) {
         setQueue((q) => [...q, ...fired]);
         if (sound.enabled) playChime(sound.volume);
@@ -81,64 +111,83 @@ export function AlertEngine({ holdings, holdingsSource }: { holdings: Record<str
 
   const current = queue[0];
   const dismiss = () => setQueue((q) => q.slice(1));
-
-  const showOnPage = () => {
-    if (!current) return;
-    dismiss();
-    if (current.rule.target === CREDITS_TARGET) {
-      requestOpenSection("live");
-      focusResource(CREDITS_TARGET);
-    } else {
-      showResource(current.rule.target);
-    }
-  };
-
   if (!current) return null;
-  const def = KIND_DEFS[current.rule.kind];
-  const s = current.subject;
-  const label = current.rule.target === CREDITS_TARGET ? "Credits" : s?.label ?? current.rule.target;
+
+  const rule = current.rule;
+  const info = sourceInfo(rule.source);
+  const subject = rule.source.type === "resource" ? (ctx.subjects.get(rule.source.resource) ?? null) : null;
+  const history = rule.source.type === "resource" ? (sellHistory.get(rule.source.resource) ?? []) : [];
+  const title = rule.name?.trim() || sourceLabel(rule.source, ctx.resourceLabel);
+  const condition = describeCondition(rule);
 
   return (
-    <Modal open onClose={dismiss} label={`Alert: ${label}`} size="sm">
-      <button type="button" className="alert-pop" onClick={showOnPage} data-autofocus>
+    <Modal open onClose={dismiss} label={`Alert: ${title}`} size="sm">
+      <button
+        type="button"
+        className="alert-pop"
+        onClick={() => {
+          dismiss();
+          showAlert(rule);
+        }}
+        data-autofocus
+      >
         <span className="alert-pop-kicker">
-          <span aria-hidden>◆</span> Alert triggered{queue.length > 1 ? ` · ${queue.length - 1} more waiting` : ""}
+          <span aria-hidden>◆</span> Alert triggered{queue.length > 1 ? `, ${queue.length - 1} more waiting` : ""}
         </span>
-        <span className="alert-pop-title">{label}</span>
+        <span className="alert-pop-title">{title}</span>
         <span className="alert-pop-result">
-          <RichText text={`${def.label} **${formatThreshold(current.rule.kind, current.rule.threshold)}**. It’s now ==${formatValue(current.rule.kind, current.value)}==.`} />
+          <RichText text={`${condition.charAt(0).toUpperCase()}${condition.slice(1)}. Now ==${formatAmount(info.unit, current.value, info.flag)}==${current.detail ? ` (${current.detail})` : ""}.`} />
         </span>
 
-        {s ? (
+        {subject && (
           <span className="alert-snapshot">
-            {current.sellHistory.length > 1 && (
+            {history.length > 1 && (
               <span className="alert-spark">
-                <Sparkline values={current.sellHistory} width={140} height={40} />
+                <Sparkline values={history} width={140} height={40} />
                 <span className="muted">30-day sell price</span>
               </span>
             )}
             <span className="mini-stats">
-              <span><span className="muted">Sell</span><strong>{s.sell == null ? "—" : integer(s.sell)}</strong></span>
-              <span><span className="muted">Buy</span><strong>{s.buy == null ? "—" : integer(s.buy)}</strong></span>
-              <span><span className="muted">vs base</span><strong>{signedPercent(s.vsBase)}</strong></span>
-              <span><span className="muted">You hold</span><strong>{s.held == null ? "—" : integer(s.held)}</strong></span>
-              <span><span className="muted">Worth</span><strong>{s.heldValue == null ? "—" : compact(s.heldValue)}</strong></span>
+              <span>
+                <span className="muted">Sell</span>
+                <strong>{subject.sell == null ? "—" : integer(subject.sell)}</strong>
+              </span>
+              <span>
+                <span className="muted">Buy</span>
+                <strong>{subject.buy == null ? "—" : integer(subject.buy)}</strong>
+              </span>
+              <span>
+                <span className="muted">vs base</span>
+                <strong>{signedPercent(subject.vsBase)}</strong>
+              </span>
+              <span>
+                <span className="muted">You hold</span>
+                <strong>{subject.held == null ? "—" : integer(subject.held)}</strong>
+              </span>
+              <span>
+                <span className="muted">Worth</span>
+                <strong>{subject.heldValue == null ? "—" : compact(subject.heldValue)}</strong>
+              </span>
             </span>
           </span>
-        ) : (
-          <span className="mini-stats">
-            <span><span className="muted">Live credits</span><strong>{current.credits == null ? "—" : integer(current.credits)}</strong></span>
-          </span>
         )}
-
-        <span className="alert-pop-cta">Show me on the page</span>
+        <span className="alert-pop-cta">Show me</span>
       </button>
       <div className="modal-actions">
-        <button type="button" className="btn btn-quiet danger" onClick={() => { updateAlert(current.rule.id, { enabled: false }); dismiss(); }}>
+        <button
+          type="button"
+          className="btn btn-quiet danger"
+          onClick={() => {
+            updateAlert(rule.id, { enabled: false });
+            dismiss();
+          }}
+        >
           Turn this alert off
         </button>
         <span className="spacer" />
-        <button type="button" className="btn btn-quiet" onClick={dismiss}>Dismiss</button>
+        <button type="button" className="btn btn-quiet" onClick={dismiss}>
+          Dismiss
+        </button>
       </div>
     </Modal>
   );

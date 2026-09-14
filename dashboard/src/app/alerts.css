@@ -1,0 +1,41 @@
+/* Alerts: the editor (what to watch, when), quick-start templates and the grouped list. */
+
+.alerts-panel { display: grid; gap: 14px; }
+.alerts-group { display: grid; gap: 6px; }
+.alerts-group-title { font: 700 16px var(--font-cond); margin: 6px 0 0; display: flex; align-items: center; gap: 8px; }
+.alerts-group-title::before {
+  content: ""; width: 10px; height: 12px; border-radius: 2px;
+  background: repeating-linear-gradient(135deg, var(--accent) 0 3px, transparent 3px 6px);
+}
+
+.alert-templates { display: grid; gap: 6px; }
+.alert-template-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.alert-editor { display: grid; gap: 16px; }
+.alert-step { display: grid; gap: 10px; }
+.alert-step-title { font: 700 16px var(--font-cond); margin: 0; }
+.alert-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.alert-tab {
+  font: 600 13px var(--font-cond); padding: 5px 11px; border-radius: 4px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--text-secondary);
+}
+.alert-tab:hover { color: var(--text-primary); background: var(--surface-2); }
+.alert-tab[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); }
+.alert-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.alert-options { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+.alert-editor .alert-config { grid-template-columns: minmax(0, 1fr); }
+.alert-condition { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.alert-condition select { min-width: 0; }
+
+.alert-picker { display: grid; gap: 8px; }
+.alert-picker-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.alert-picker-row {
+  font: inherit; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; padding: 6px 10px; text-align: left;
+  border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text-primary); cursor: pointer;
+}
+.alert-picker-row:hover { background: var(--surface-2); }
+.alert-picker-row:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.alert-picker-row.is-selected { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.alert-picker-name { font-size: 13px; font-weight: 600; }
+.alert-picker-address { grid-column: 1; font: 11px var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alert-picker-value { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 600 13px var(--font-mono); }

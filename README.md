@@ -5,7 +5,7 @@ A live dashboard, companion and guide for **The Crust** (1.0, Steam). It runs on
 - **Live now**: a board of widgets you arrange yourself (credits, power, CPU, research, drones, missions, key resources, market moves…), with layouts for different play styles.
 - **Missions and tasks**: the game's missions step by step with live progress, and your own task list, kept until you delete it.
 - **Colony history**: credits, net worth, resources, income and spending, and buildings from your saves, with charts.
-- **Assistant**: findings about your numbers with what to do, price and credit alerts with a chime, and a notification panel.
+- **Assistant**: findings about your numbers with what to do, custom alerts on prices, stock, credits, power, CPU, drones, research, missions, pause/disconnect or any game value, with quick-start templates and a chime, and a notification panel.
 - **Wiki**: 269 articles for The Crust 1.0 from The Crust Wiki and the game's own encyclopedia text, each marked with how current it is and linked back to your colony.
 - **Calculator** for trades, contracts and credit goals.
 

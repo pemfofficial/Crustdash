@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useAlertContext } from "@/components/alerts/AlertData";
 import { AlertEditor } from "@/components/alerts/AlertEditor";
 import { InsightList } from "@/components/insights/InsightList";
-import { useLive } from "@/components/live/LiveProvider";
 import { focusResource, showResource, usePrefs } from "@/components/live/PrefsProvider";
-import { useAlertSubjects, useResourceLabel } from "@/components/live/useMarketRows";
+import { useResourceLabel } from "@/components/live/useMarketRows";
 import { Modal } from "@/components/ui/Modal";
 import { RichText } from "@/components/ui/RichText";
 import { openModule } from "@/lib/client/moduleHash";
 import { shouldIgnoreShortcut } from "@/lib/client/keyboard";
 import { useStoredState } from "@/lib/client/useStoredState";
-import { CREDITS_TARGET, KIND_DEFS, describeRule, evaluateRule, formatThreshold, formatValue, type AlertRule } from "@/lib/crust/alerts";
+import { CREDITS_TARGET, describeCondition, describeRule, evaluateRule, formatAmount, sourceInfo, sourceLabel, type AlertRule } from "@/lib/crust/alerts";
 import { stripMarkup } from "@/lib/crust/markup";
 import { TOPICS } from "@/lib/crust/topics";
 import { AREA_TEXT, LEVEL_ICON, LEVEL_TEXT, type Insight, type InsightArea } from "@/lib/crust/types";
@@ -69,7 +69,7 @@ export function useNotifications(insights: Insight[]) {
         id: `alert-${rule.id}`,
         signature: String(rule.lastFiredAt),
         bucket: "urgent",
-        title: describeRule(rule, rule.target === CREDITS_TARGET ? "Credits" : labelOf(rule.target)),
+        title: describeRule(rule, labelOf),
         meta: `Alert fired at ${clock(rule.lastFiredAt ?? 0)}${rule.firedCount > 1 ? ` · ${rule.firedCount} times` : ""}`,
         rule,
       }));
@@ -126,16 +126,13 @@ type DetailProps = {
   onDismiss: () => void;
   onRestore: () => void;
   onAlert: (target: string) => void;
-  holdings: Record<string, number>;
-  holdingsSource: "live" | "save";
 };
 
 /** The modal behind a notification: what it is, and buttons that take you there or do the thing. */
-function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, onAlert, holdings, holdingsSource }: DetailProps) {
+function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, onAlert }: DetailProps) {
   const labelOf = useResourceLabel();
-  const live = useLive();
+  const ctx = useAlertContext();
   const { updateAlert } = usePrefs();
-  const subjects = useAlertSubjects(holdings, holdingsSource);
   const bucket = BUCKETS.find((b) => b.id === n.bucket)?.label;
   const go = (fn: () => void) => {
     onClose();
@@ -157,9 +154,12 @@ function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, o
 
   if (n.kind === "alert") {
     const rule = n.rule;
-    const isCredits = rule.target === CREDITS_TARGET;
-    const label = isCredits ? "Credits" : labelOf(rule.target);
-    const ev = evaluateRule(rule, isCredits ? null : subjects.get(rule.target) ?? null, live.credits);
+    const source = rule.source;
+    const resource = source.type === "resource" ? source.resource : null;
+    const isCredits = source.type === "metric" && source.metric === "credits";
+    const label = rule.name?.trim() || sourceLabel(source, labelOf);
+    const info = sourceInfo(source);
+    const ev = evaluateRule(rule, ctx);
     return (
       <div className="notify-detail">
         <p className={`notify-kicker b-${n.bucket}`}>
@@ -168,7 +168,7 @@ function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, o
         <h2 className="modal-title">{label}</h2>
         <p className="notify-text">
           <RichText
-            text={`${KIND_DEFS[rule.kind].label} **${formatThreshold(rule.kind, rule.threshold)}**. ${ev.unavailable ? `Right now: _${ev.unavailable}_.` : `Right now: ==${formatValue(rule.kind, ev.value)}==.`}`}
+            text={`Fires when it ${describeCondition(rule)}. ${ev.unavailable ? `Right now: _${ev.unavailable}_.` : `Right now: ==${formatAmount(info.unit, ev.value, info.flag)}==${ev.detail ? ` (${ev.detail})` : ""}.`}`}
           />
         </p>
         <p className="notify-meta">
@@ -182,17 +182,17 @@ function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, o
               className="notify-action primary"
               data-autofocus
               onClick={() =>
-                isCredits
-                  ? go(() => {
+                resource
+                  ? openResource(resource)
+                  : go(() => {
                       openModule("live");
-                      window.setTimeout(() => focusResource(CREDITS_TARGET), 60);
+                      if (isCredits) window.setTimeout(() => focusResource(CREDITS_TARGET), 60);
                     })
-                  : openResource(rule.target)
               }
             >
-              {isCredits ? "Show live credits" : `Show ${label} in Resources`}
+              {resource ? `Show ${labelOf(resource)} in Resources` : isCredits ? "Show live credits" : "Open Live now"}
             </button>
-            {!isCredits && (
+            {resource && (
               <button type="button" className="notify-action" onClick={() => go(() => openModule("calculator"))}>
                 Price a trade in the Calculator
               </button>
@@ -278,13 +278,10 @@ function NoticeDetail({ notice: n, isDismissed, onClose, onDismiss, onRestore, o
   );
 }
 
-type CenterProps = { notices: Notifications; holdings: Record<string, number>; holdingsSource: "live" | "save" };
+type CenterProps = { notices: Notifications };
 
 /** Status-bar bell: a compact panel of urgent, pressing and recommended items; each opens a modal to act on it. Shortcut: N. */
-export function NotificationCenter({ notices, holdings, holdingsSource }: CenterProps) {
-  const live = useLive();
-  const labelOf = useResourceLabel();
-  const subjects = useAlertSubjects(holdings, holdingsSource);
+export function NotificationCenter({ notices }: CenterProps) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Bucket | "all">("all");
   const [showDismissed, setShowDismissed] = useState(false);
@@ -459,8 +456,6 @@ export function NotificationCenter({ notices, holdings, holdingsSource }: Center
             }}
             onRestore={() => notices.restore(current)}
             onAlert={setAlerting}
-            holdings={holdings}
-            holdingsSource={holdingsSource}
           />
         ) : (
           <div className="notify-detail">
@@ -476,7 +471,7 @@ export function NotificationCenter({ notices, holdings, holdingsSource }: Center
       </Modal>
 
       {alerting && (
-        <AlertEditor target={alerting} label={labelOf(alerting)} subject={subjects.get(alerting) ?? null} credits={live.credits} onClose={() => setAlerting(null)} />
+        <AlertEditor resource={alerting} onClose={() => setAlerting(null)} />
       )}
     </div>
   );

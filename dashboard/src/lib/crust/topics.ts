@@ -231,8 +231,8 @@ export const TOPICS: Record<TopicId, Topic> = {
   },
   alerts: {
     title: "Alerts",
-    what: "Your own triggers on live prices, market position, holdings and credits.",
-    here: "Checked on every live update **while this dashboard is open** in a browser tab. A soft chime plays and a pop-up shows the result; click it to jump to that resource. Saved in this browser.",
+    what: "Your own triggers on almost anything the game reports: prices and holdings, credits and net worth, power, CPU, drones, research, missions, the game pausing or disconnecting, and any raw game value.",
+    here: "Checked on every live update **while this dashboard is open** in a browser tab. A soft chime plays and a pop-up shows the result; click it to jump to what it's about. Level alerts fire when the condition becomes true; change alerts (rises by, falls by, changes) fire on the change itself. Saved in this browser.",
     source: "This dashboard",
   },
   pins: {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
+import { AlertDataProvider } from "@/components/alerts/AlertData";
 import { AlertEngine } from "@/components/alerts/AlertEngine";
 import { AlertsPanel } from "@/components/alerts/AlertsPanel";
 import { Calculator } from "@/components/calculator/Calculator";
@@ -217,10 +218,10 @@ function DashboardBody({ profile, rangeKey, ranges, analysis: a, holdings: saveH
       id: "alerts",
       group: "Assistant",
       label: "Alerts",
-      summary: "Your triggers on prices, holdings and credits",
+      summary: "Your own triggers on prices, power, CPU, missions, the game and more",
       info: "alerts",
       badge: alertsOn ? <span className="badge-info" title="Alerts on">{alertsOn}</span> : undefined,
-      content: <AlertsPanel holdings={holdings} holdingsSource={source} />,
+      content: <AlertsPanel />,
     },
     { id: WIKI_MODULE, group: "Reference", label: "Wiki", summary: `How The Crust ${WIKI_INDEX.gameVersion} works`, content: <WikiModule /> },
     { id: "calculator", group: "Tools", label: "Calculator", summary: "Keypad, trades, contracts and credit goals", content: calculator("full") },
@@ -249,14 +250,14 @@ function DashboardBody({ profile, rangeKey, ranges, analysis: a, holdings: saveH
   ];
 
   return (
-    <>
+    <AlertDataProvider holdings={holdings} holdingsSource={source} missions={missions} notifications={notices.counts} profileName={profile.name}>
       <TerminalShell
         title={profile.title}
         status={<LinkStatus />}
         tools={
           <>
             <TaskCenter missions={missions} profileName={profile.name} />
-            <NotificationCenter notices={notices} holdings={holdings} holdingsSource={source} />
+            <NotificationCenter notices={notices} />
             <ThemeToggle />
           </>
         }
@@ -280,7 +281,7 @@ function DashboardBody({ profile, rangeKey, ranges, analysis: a, holdings: saveH
         }
       />
       {isLive && <LiveAutoRefresh />}
-      <AlertEngine holdings={holdings} holdingsSource={source} />
-    </>
+      <AlertEngine />
+    </AlertDataProvider>
   );
 }
